@@ -451,6 +451,10 @@ var AppCamera = (function () {
         var form_values = [];
         var iterator;
         var form = this.iframedoc.getElementById('appp_camera_form');
+        if (!form) {
+            console.warn('Form element appp_camera_form not found');
+            return;
+        }
         var form_elements = form.elements;
         var shortcode_actions = ['new', 'this', 'library'];
         params.appp_action = 'attach'; // default: attach to BP activity
@@ -510,6 +514,10 @@ var AppCamera = (function () {
             this.findIframe();
         }
         var progress = this.iframedoc.getElementById('cam-progress');
+        if (!progress) {
+            console.warn('Progress element not found');
+            return;
+        }
         progress.style.visibility = 'visible';
         var perc = Math.floor(loaded / total * 100);
         progress.value = perc;
@@ -520,6 +528,10 @@ var AppCamera = (function () {
             this.findIframe();
         }
         var progress = this.iframedoc.getElementById('cam-progress');
+        if (!progress) {
+            console.warn('Progress element not found');
+            return;
+        }
         progress.style.visibility = 'hidden';
         progress.value = 0;
     };
@@ -528,16 +540,28 @@ var AppCamera = (function () {
         // console.log('attach win', r);
         this.findIframe();
         this.iframedoc = this.iframe.contentWindow.document;
-        var action = this.iframedoc.getElementById('appp_action').value;
+        var actionEl = this.iframedoc.getElementById('appp_action');
+        if (!actionEl) {
+            console.warn('Element appp_action not found');
+            return;
+        }
+        var action = actionEl.value;
         var imgUrl = this.camUtil(r.response);
         var imgTag = (imgUrl) ? '<img src="' + imgUrl + '">' : '';
-        this.iframedoc.getElementById('attach-image').value = imgUrl;
-        this.iframedoc.getElementById('image-status').innerHTML = imgTag;
+        var attachImageEl = this.iframedoc.getElementById('attach-image');
+        var imageStatusEl = this.iframedoc.getElementById('image-status');
+        var camStatusEl = this.iframedoc.getElementById('cam-status');
+        var attachImageSheetEl = this.iframedoc.getElementById('attach-image-sheet');
+        if (attachImageEl)
+            attachImageEl.value = imgUrl;
+        if (imageStatusEl)
+            imageStatusEl.innerHTML = imgTag;
         this.hideProgress();
-        this.iframedoc.getElementById('cam-status').innerHTML = '';
+        if (camStatusEl)
+            camStatusEl.innerHTML = '';
         // hide action sheet
-        this.iframedoc.getElementById('attach-image-sheet').className =
-            this.iframedoc.getElementById('attach-image-sheet').className.replace(/\bactive\b/, 'hide');
+        if (attachImageSheetEl)
+            attachImageSheetEl.className = attachImageSheetEl.className.replace(/\bactive\b/, 'hide');
         this.appbuddy = false;
     };
     AppCamera.prototype.uploadWin = function (r) {
@@ -601,8 +625,13 @@ var AppCamera = (function () {
                 }
                 // console.log('attach img', matches);
             }
-            if (matches[0]) {
-                return JSON.parse(matches[0]);
+            if (matches && matches[0]) {
+                try {
+                    return JSON.parse(matches[0]);
+                } catch (e) {
+                    console.warn('Error parsing match result:', e);
+                    return '';
+                }
             }
         }
         return '';
@@ -686,6 +715,8 @@ var FbConnectIframe = (function () {
         this.Facebook.login(this.fbconnectvars.login_scope).then(function (result) {
             // we get back an auth response here, should save it or something
             _this.statusChangeCallback(result);
+        }).catch(function (error) {
+            console.warn('Facebook login error:', error);
         });
         // return false; // so not to submit the form
     };
@@ -953,7 +984,12 @@ var AppData = (function () {
     AppData.prototype.load = function (apiurl) {
         var _this = this;
         var item = window.localStorage.getItem('myappp');
-        this.local = JSON.parse(item);
+        try {
+            this.local = item ? JSON.parse(item) : null;
+        } catch (e) {
+            console.warn('Error parsing localStorage data:', e);
+            this.local = null;
+        }
         this.updateNeeded = (window.localStorage.getItem('myappp_update') == 'true') ? true : false;
         if (this.Device.platform != 'iOS' && this.Device.platform != 'Android') {
             // if we are not on a device, don't cache data. helps preview update faster
@@ -1015,7 +1051,12 @@ var AppData = (function () {
         if (this.notAuthorized)
             return; // membership expired
         var item = window.localStorage.getItem('myappp');
-        this.local = JSON.parse(item);
+        try {
+            this.local = item ? JSON.parse(item) : null;
+        } catch (e) {
+            console.warn('Error parsing localStorage data:', e);
+            this.local = null;
+        }
         // Runs in the background, and set the app to update on the next load
         // check if local app_update_version and remote version match, set updateNeeded accordingly
         this.http.get(apiurl)
@@ -1023,12 +1064,14 @@ var AppData = (function () {
             .subscribe(function (data) {
             // we've got back the raw data, now generate the core schedule data
             // and save the data for later reference
-            if (_this.local.meta && data.meta && _this.local.meta.app_update_version != data.meta.app_update_version) {
+            if (_this.local && _this.local.meta && data.meta && _this.local.meta.app_update_version != data.meta.app_update_version) {
                 window.localStorage.setItem('myappp_update', 'true');
             }
             else {
                 window.localStorage.removeItem('myappp_update');
             }
+        }, function (error) {
+            console.warn('Error checking for updates:', error);
         });
     };
     AppData.prototype.handleError = function (err) {
@@ -1455,7 +1498,13 @@ var WPlogin = (function () {
         this.http = http;
         this.data = null;
         var item = window.localStorage.getItem('myappp');
-        this.url = JSON.parse(item).wordpress_url;
+        try {
+            var parsedItem = item ? JSON.parse(item) : null;
+            this.url = parsedItem && parsedItem.wordpress_url ? parsedItem.wordpress_url : '';
+        } catch (e) {
+            console.warn('Error parsing localStorage data in WPlogin constructor:', e);
+            this.url = '';
+        }
     }
     /* Returns promise.
      * Usage:
@@ -1465,6 +1514,18 @@ var WPlogin = (function () {
         return new Promise(function (resolve, reject) {
             if (!_this.url)
                 reject({ data: { message: "No WordPress URL set. " } });
+            if (!form || !form.user || !form.pass) {
+                reject({ data: { message: "Username and password are required." } });
+                return;
+            }
+            if (typeof form.user !== 'string' || typeof form.pass !== 'string') {
+                reject({ data: { message: "Invalid credentials format." } });
+                return;
+            }
+            if (form.user.trim() === '' || form.pass.trim() === '') {
+                reject({ data: { message: "Username and password cannot be empty." } });
+                return;
+            }
             var url = _this.url + 'wp-admin/admin-ajax.php?action=apppajaxlogin';
             var data = {
                 action: 'apppajaxlogin',
@@ -1492,7 +1553,11 @@ var WPlogin = (function () {
                         resolve(JSON.parse(request.responseText));
                     }
                     else {
-                        reject(JSON.parse(request.statusText));
+                        try {
+                            reject(JSON.parse(request.responseText));
+                        } catch (e) {
+                            reject({ error: request.statusText, status: request.status });
+                        }
                     }
                 }
             };
@@ -1598,6 +1663,8 @@ var FbConnectApp = (function () {
         this.Facebook.login(this.fbconnectvars.login_scope).then(function (result) {
             // we get back an auth response here, should save it or something
             _this.statusChangeCallback(result);
+        }).catch(function (error) {
+            console.warn('Facebook login error:', error);
         });
     };
     // This is called with the results from from FB.getLoginStatus().
@@ -1626,6 +1693,8 @@ var FbConnectApp = (function () {
         var _this = this;
         this.Facebook.api("/me?fields=" + this.fbconnectvars.me_fields, null).then(function (response) {
             _this.fetchUser_Callback(response);
+        }).catch(function (error) {
+            console.warn('Facebook API error:', error);
         });
     };
     FbConnectApp.prototype.fetchUser_Callback = function (response) {
@@ -2724,7 +2793,13 @@ var MyApp = (function () {
             // if it's not our json object, return
             if (e.data.indexOf('{') != 0)
                 return;
-            var data = JSON.parse(e.data);
+            var data;
+            try {
+                data = JSON.parse(e.data);
+            } catch (err) {
+                console.warn('Error parsing postMessage data:', err);
+                return;
+            }
             if (data.url) {
                 // push a new page
                 var page = { title: data.title, component: 'Iframe', url: data.url, classes: null };
