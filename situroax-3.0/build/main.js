@@ -1505,9 +1505,11 @@ var WPlogin = (function () {
             _this.http.get(url)
                 .map(function (res) { return res.json(); })
                 .subscribe(function (data) {
-                if (data.success == true)
+                if (data.success == true) {
                     resolve(data);
-                reject(data);
+                } else {
+                    reject(data);
+                }
             }, function (error) {
                 reject(error);
             });
